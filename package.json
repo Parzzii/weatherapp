@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "framer-motion": "^12.23.6",
     "lucide-react": "^0.525.0",
     "next": "15.3.5",
     "react": "^19.0.0",
@@ -22,10 +21,14 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4.1.11",
     "autoprefixer": "^10.4.21",
+    "clsx": "^2.1.1",
     "eslint": "^9",
     "eslint-config-next": "15.3.5",
+    "framer-motion": "^12.23.6",
     "postcss": "^8.5.6",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.17"
   }
 }

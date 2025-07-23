@@ -3,10 +3,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion"; // Importing motion for animations
-import { WiDaySunny, WiRain, WiSnow } from "react-icons/wi";
 import ReactAnimatedWeather from "react-animated-weather";
 import Particles from "react-tsparticles";
 import { loadSnowPreset } from "tsparticles-preset-snow";
+// import { cn } from "../lib/utils";
 
 // Mapping OpenWeatherMap weather conditions to animated icons
 const weatherToIcon = {
@@ -35,14 +35,25 @@ export default function Weather() {
   const [suggestions, setSuggestions] = useState([]);
   const [activeCity, setActiveCity] = useState(null);
   const [pinnedCities, setPinnedCities] = useState([]); // State for pinned cities
+  const [cityForecasts, setCityForecasts] = useState({});
 
   const togglePinCity = (data) => {
-    const isPinned = pinnedCities.some((c) => c.name === data.name);
-    if (isPinned) {
-      setPinnedCities(pinnedCities.filter((c) => c.name !== data.name));
+    const cityName = data.location.name;
+
+    const isAlreadyPinned = pinnedCities.some((c) => c.location.name === cityName);
+
+    if (isAlreadyPinned) {
+      setPinnedCities(pinnedCities.filter((c) => c.location.name !== cityName));
     } else {
-      setPinnedCities([...pinnedCities, data]);
-      setActiveCity(null);
+      setPinnedCities((prev) => [...prev, data]);
+
+      // Also fetch and store the forecast for this new pinned city
+      fetchUpcoming(cityName);
+
+      // Clear active city only if it's the one being pinned
+      if (activeCity?.location?.name === cityName) {
+        setActiveCity(null);
+      }
     }
   };
 
@@ -61,6 +72,7 @@ export default function Weather() {
       if (!res.ok) throw new Error("City not found");
       const data = await res.json();
       setActiveCity(data); // Store the fetched weather data
+      await fetchUpcoming(city); // Fetch upcoming weather forecast
     } catch (error) {
       alert(error.message); // Alert the user if there's an error
       setActiveCity(null); // Reset weather data on error
@@ -69,6 +81,23 @@ export default function Weather() {
     }
   };
 
+  // Effect to fetch upcoming weather forecast when activeCity changes
+  const fetchUpcoming = async (cityName) => {
+    if (!cityName) return;
+    try {
+      const res = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=810a339ed1584e6e90f162232251707&q=${cityName}&days=7`);
+      const data = await res.json();
+
+      setCityForecasts((prev) => ({
+        ...prev,
+        [cityName]: data.forecast.forecastday,
+      }));
+    } catch (err) {
+      console.error("Forecast error:", err);
+    }
+  };
+
+  // Effect to apply dark mode class to the document
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add("dark");
@@ -95,9 +124,14 @@ export default function Weather() {
   };
 
   // WeatherCard component to display individual weather cards
-  function WeatherCard({ data, pinned, togglePinCity }) {
+  function WeatherCard({ data, pinned, togglePinCity, forecast }) {
     return (
-      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 100 }} className="bg-white/10 backdrop-blur-md shadow-2xl rounded-2xl border border-white/30-lg p-6 text-center w-[300px] dark:bg-white/10 text-black dark:text-white">
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 100 }}
+        className="bg-white/10 backdrop-blur-md shadow-2xl rounded-2xl border border-white/30 p-4 sm:p-6 text-center w-full sm:w-[400px] md:w-[500px] lg:w-[600px] dark:bg-white/10 text-black dark:text-white"
+      >
         <ReactAnimatedWeather icon={weatherToIcon[data.current.condition.code] || "PARTLY_CLOUDY_DAY"} color="goldenrod" size={64} animate={true} />
         <button onClick={() => togglePinCity(data)} className="text-sm mb-2">
           {pinned ? "Unpin 📍" : "Pin 📌"}
@@ -108,15 +142,28 @@ export default function Weather() {
         <p className="text-2xl mb-2">
           {Math.round(data.current.temp_c)}°C | {Math.round(data.current.temp_f)}°F
         </p>
+
         <p className="text-xl mb-4">{data.current.condition.text}</p>
         <p className="text-lg">Humidity: {data.current.humidity}%</p>
         <p className="text-lg">Wind Speed: {data.current.wind_kph}</p>
         <p className="text-lg">Cloudiness: {data.current.cloud}%</p>
         <p className="text-lg">Visibility: {data.current.vis_km} km</p>
         <p className="text-lg">Pressure: {data.current.pressure_mb} hPa</p>
-        <p className="text-lg">Sunrise: {new Date(data.current.sunrise * 1000).toLocaleTimeString()}</p>
-        <p className="text-lg">Sunset: {new Date(data.current.sunset * 1000).toLocaleTimeString()}</p>
+        <p className="text-lg">Sunrise: {forecast?.[0]?.astro?.sunrise}</p>
+        <p className="text-lg">Sunset: {forecast?.[0]?.astro?.sunset}</p>
+
         <p className="text-lg">Feels like: {Math.round(data.current.feelslike_c)}°C</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-8">
+          {forecast.map((day, i) => (
+            <div key={i} className="p-4 bg-white/10 rounded-xl text-center">
+              <p className="font-semibold">{day.date}</p>
+              <img src={day.day.condition.icon} alt={day.day.condition.text} className="mx-auto" />
+              <p>{day.day.condition.text}</p>
+              <p>High: {day.day.maxtemp_c}°C</p>
+              <p>Low: {day.day.mintemp_c}°C</p>
+            </div>
+          ))}
+        </div>
       </motion.div>
     );
   }
@@ -146,7 +193,7 @@ export default function Weather() {
         />
       )}
       {/* Navbar */}
-      <nav className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 bg-white/60 dark:bg-white/10">
+      <nav className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 bg-white/60 dark:bg-white/10 w-full md:w-auto">
         {/* Logo */}
         <div className="flex justify-center md:justify-start w-full md:w-auto">
           <h1 className="text-2xl font-bold">🌦️ Weather App</h1>
@@ -158,7 +205,7 @@ export default function Weather() {
             <input
               type="text"
               placeholder="Enter city..."
-              className="pl-12 pr-4 py-3 w-full bg-white/10 dark:bg-white/10 backdrop-blur-lg
+              className="pl-10 sm:pl-12 pr-4 py-2 sm:py-3 w-full bg-white/10 dark:bg-white/10 backdrop-blur-lg
          text-black placeholder-black/70 dark:text-white dark:placeholder-white/70
          rounded-2xl border border-white/30
          shadow-[inset_1px_1px_4px_rgba(255,255,255,0.1),_1px_1px_10px_rgba(0,0,0,0.2)]
@@ -213,14 +260,14 @@ export default function Weather() {
         ) : pinnedCities.length === 0 && !activeCity ? (
           <h2 className="text-3xl">Search for a city to see the weather ☁️</h2>
         ) : (
-          <div className="flex gap-6 flex-wrap justify-center">
+          <div className="flex flex-col sm:flex-row gap-6 flex-wrap justify-center items-center px-4">
             {/* Pinned cities */}
             {pinnedCities.map((data, idx) => (
-              <WeatherCard key={`pinned-${idx}`} data={data} pinned togglePinCity={togglePinCity} />
+              <WeatherCard key={`pinned-${idx}`} data={data} pinned togglePinCity={togglePinCity} forecast={cityForecasts[data.location.name] || []} />
             ))}
 
             {/* Active (un-pinned) city */}
-            {activeCity && <WeatherCard data={activeCity} pinned={false} togglePinCity={togglePinCity} />}
+            {activeCity && <WeatherCard data={activeCity} pinned={false} togglePinCity={togglePinCity} forecast={cityForecasts[activeCity.location.name] || []} />}
           </div>
         )}
       </section>
